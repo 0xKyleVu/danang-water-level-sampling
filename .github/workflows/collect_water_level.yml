@@ -1,0 +1,43 @@
+name: Collect water level samples
+
+on:
+  schedule:
+    # Moi 15 phut, lech khoi dau gio de tranh gio cao diem cua GitHub scheduler
+    - cron: "3,18,33,48 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: water-level-sampling
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cai dependency
+        run: pip install requests
+
+      - name: Lay mau muc nuoc
+        run: python collect_water_level.py
+
+      - name: Commit ket qua
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add water_level_samples.csv
+          if git diff --staged --quiet; then
+            echo "Khong co du lieu moi"
+            exit 0
+          fi
+          git commit -m "water level sample $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase --autostash origin ${{ github.ref_name }}
+          git push
