@@ -1,0 +1,42 @@
+name: Diagnose reachability
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Thong tin IP cua runner
+        run: |
+          echo "--- IP cong khai cua runner ---"
+          curl -s -m 15 https://api.ipify.org || echo "(khong lay duoc)"
+          echo ""
+          curl -s -m 15 https://ipinfo.io/json || echo "(khong lay duoc)"
+
+      - name: Test cac host lien quan
+        run: |
+          for host in \
+            "https://muangap-api.danang.gov.vn/v2/client/water_station/type" \
+            "https://muangap.danang.gov.vn/" \
+            "https://danang.gov.vn/" \
+            "https://congdulieu.vn/" ; do
+            printf "%-70s" "$host"
+            curl -s -m 20 -o /dev/null -w "HTTP:%{http_code} time:%{time_total}s\n" "$host" || echo "FAIL"
+          done
+
+      - name: Test DNS va TCP rieng biet
+        run: |
+          echo "--- DNS resolve ---"
+          getent hosts muangap-api.danang.gov.vn || echo "DNS FAIL"
+          echo ""
+          echo "--- IP that su cua api ---"
+          dig +short muangap-api.danang.gov.vn || true
+          echo ""
+          echo "--- TCP connect port 443 (timeout 10s) ---"
+          timeout 10 bash -c 'cat < /dev/null > /dev/tcp/muangap-api.danang.gov.vn/443' \
+            && echo "TCP OK" || echo "TCP BLOCKED/TIMEOUT"
+          echo ""
+          echo "--- traceroute (10 hop dau) ---"
+          sudo apt-get install -y traceroute -qq > /dev/null 2>&1 || true
+          timeout 30 traceroute -m 10 -w 2 muangap-api.danang.gov.vn 2>&1 | head -15 || echo "(traceroute khong chay duoc)"
