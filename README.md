@@ -13,20 +13,58 @@ official Da Nang flood/rain map, `GET /v2/client/water_station/list_all`
 results committed and pushed to this repo (see *Why not GitHub Actions* below)
 **Cost:** free, no rate limit on this endpoint observed
 
-## Why not GitHub Actions
+## Why not GitHub Actions: the API blocks cloud IP ranges
 
 The collection was originally set up as a GitHub Actions scheduled workflow
-(`.github/workflows/collect_water_level.yml`, now **disabled**). It fails:
-every run dies with `requests.exceptions.ConnectTimeout` — a TCP connect
-timeout, meaning packets never reach the host — while the exact same request
-from a residential connection succeeds in ~1s at the same moment. Two
-consecutive runs failed identically.
+(`.github/workflows/collect_water_level.yml`, now **disabled**). Every run
+died with `requests.exceptions.ConnectTimeout` while the identical request
+from a Vietnamese residential connection succeeded in ~1.1s at the same
+moment.
 
-GitHub-hosted runners use Azure datacenter IP ranges, which WAFs commonly
-block wholesale. The workflow file is kept in the repo for reference (and in
-case the block is lifted), but collection runs locally instead. The local
-runner still commits and pushes to this same repo, so the data stays in one
-public place — only the execution host changed.
+A diagnostic workflow (`.github/workflows/diagnose.yml`, manual trigger)
+established the mechanism:
+
+```
+DNS resolve        103.101.76.42          OK
+TCP connect :443   BLOCKED / TIMEOUT
+traceroute         * * *  (all hops)
+runner public IP   135.119.239.52  (AS8075 Microsoft, Azure eastus2)
+```
+
+The block is a **packet-level firewall drop at the Da Nang government
+datacenter**, not an application-layer rejection — so it cannot be worked
+around with headers, user agents, or request shaping. Host-by-host results
+from the same runner:
+
+| Host | Result |
+|---|---|
+| `muangap-api.danang.gov.vn` (103.101.76.42) | timeout |
+| `muangap.danang.gov.vn` | timeout |
+| `congdulieu.vn` (city open-data portal) | timeout |
+| `danang.gov.vn` (main city portal) | **HTTP 200** |
+
+The main city portal is hosted elsewhere and remains reachable; the flood
+system and the open-data portal share the blocked `103.101.76.0/24` range.
+
+**The blocklist is selective, not "all datacenters."** Tested egress points:
+
+| Source | ASN | Result |
+|---|---|---|
+| Vietnamese residential ISP | — | reachable, ~1.1s |
+| Anthropic infrastructure (US datacenter) | — | reachable |
+| GitHub Actions | AS8075 Microsoft | blocked |
+| Cloudflare Workers (`wrangler dev --remote`) | AS13335 Cloudflare | blocked |
+| Google Apps Script (`UrlFetchApp`) | AS15169 Google | inconclusive — generic runtime error after a long hang, consistent with a timeout but not confirmed |
+
+The pattern is consistent with a curated blocklist of large cloud/CDN ASNs
+commonly used for scraping, rather than geographic filtering.
+
+**Consequence for reproducibility:** anyone attempting to re-run this
+collection from a hosted CI service or serverless platform will likely hit
+the same wall. Collection must run from an un-blocked network — in this
+project, a local machine on a Vietnamese ISP, scheduled via Windows Task
+Scheduler, which commits and pushes to this same repo. Only the execution
+host changed; the data stays in one public place.
 
 ---
 
