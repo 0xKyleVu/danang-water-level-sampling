@@ -9,8 +9,24 @@ below).
 **Data source:** [muangap-api.danang.gov.vn](https://muangap.danang.gov.vn) — the
 official Da Nang flood/rain map, `GET /v2/client/water_station/list_all`
 (public, no API key required)
-**Collection:** GitHub Actions, every 15 minutes, results committed back to this repo
+**Collection:** Windows Task Scheduler on a local machine, every 15 minutes,
+results committed and pushed to this repo (see *Why not GitHub Actions* below)
 **Cost:** free, no rate limit on this endpoint observed
+
+## Why not GitHub Actions
+
+The collection was originally set up as a GitHub Actions scheduled workflow
+(`.github/workflows/collect_water_level.yml`, now **disabled**). It fails:
+every run dies with `requests.exceptions.ConnectTimeout` — a TCP connect
+timeout, meaning packets never reach the host — while the exact same request
+from a residential connection succeeds in ~1s at the same moment. Two
+consecutive runs failed identically.
+
+GitHub-hosted runners use Azure datacenter IP ranges, which WAFs commonly
+block wholesale. The workflow file is kept in the repo for reference (and in
+case the block is lifted), but collection runs locally instead. The local
+runner still commits and pushes to this same repo, so the data stays in one
+public place — only the execution host changed.
 
 ---
 
@@ -54,11 +70,18 @@ real time series going forward, even though it cannot recover the past.
    mark whether it falls in urban Da Nang proper (vs. mountain areas / the
    former Quảng Nam territory merged into Đà Nẵng in 2025).
 
-A GitHub Actions workflow (`.github/workflows/collect_water_level.yml`) runs
-this every 15 minutes and commits the updated CSV. The script itself stops
-appending after **2026-09-01** (one week from setup) to avoid silently
-accumulating data past the intended window if the workflow is forgotten;
-extend `COLLECTION_END` in `collect_water_level.py` to keep going.
+A Windows scheduled task (`Danang_WaterLevel_Sampling`) runs `run_hidden.vbs`
+→ `run_sample.bat` every 15 minutes, which collects a sample and pushes it to
+this repo. The script itself stops appending after **2026-09-01** (one week
+from setup) to avoid silently accumulating data past the intended window if
+the task is forgotten; extend `COLLECTION_END` in `collect_water_level.py` to
+keep going.
+
+To stop collection early:
+
+```powershell
+Unregister-ScheduledTask -TaskName Danang_WaterLevel_Sampling -Confirm:$false
+```
 
 ---
 
