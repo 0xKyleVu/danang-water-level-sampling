@@ -54,10 +54,14 @@ system and the open-data portal share the blocked `103.101.76.0/24` range.
 | Anthropic infrastructure (US datacenter) | — | reachable |
 | GitHub Actions | AS8075 Microsoft | blocked |
 | Cloudflare Workers (`wrangler dev --remote`) | AS13335 Cloudflare | blocked |
-| Google Apps Script (`UrlFetchApp`) | AS15169 Google | inconclusive — generic runtime error after a long hang, consistent with a timeout but not confirmed |
+| Google Apps Script (`UrlFetchApp`) | AS15169 Google | blocked — confirmed after isolating with a 3-URL control test (a known-good URL and `danang.gov.vn` both succeeded from the same script; only the muangap-api target failed) |
 
+**All three major clouds tested (Microsoft, Cloudflare, Google) are blocked.**
 The pattern is consistent with a curated blocklist of large cloud/CDN ASNs
-commonly used for scraping, rather than geographic filtering.
+commonly used for scraping, rather than geographic filtering — and given 3/3
+of the largest providers are blocked, further hosted-cloud platforms were not
+tried; the marginal chance of finding an unblocked one did not justify the
+time against a one-week deadline.
 
 **Consequence for reproducibility:** anyone attempting to re-run this
 collection from a hosted CI service or serverless platform will likely hit
