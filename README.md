@@ -1,10 +1,32 @@
 # Da Nang Real-Time Water Level Snapshot Sampling
 
+> ## ⏹ STOPPED — this repo is no longer collecting data
+>
+> Collection ran from **2026-08-26 22:45 to 2026-09-01 01:10** (212 sampling
+> rounds, 19,716 rows). It has been **permanently stopped**:
+>
+> - The local Windows Task Scheduler job (`Danang_WaterLevel_Sampling`) has
+>   been **unregistered** — no scheduled process on any machine calls this
+>   API anymore.
+> - Both GitHub Actions workflows in this repo
+>   (`collect_water_level.yml` and `diagnose.yml`) are **disabled**, including
+>   the manual-trigger diagnostic one — nothing in this repo will call
+>   `muangap-api.danang.gov.vn` again unless a workflow is explicitly
+>   re-enabled and re-run by a human.
+> - Reason for stopping: analysis of the collected data found the "real-time"
+>   readings from `Thap bao ngap` (street flood sensors) do not behave like
+>   live sensor data — see *Data quality finding* below. The project pivoted
+>   to a statistical rainfall→water-level model calibrated on the existing
+>   512 real flood reports instead, which needs no further calls to this API.
+>
+> `water_level_samples.csv` in this repo is the final, complete dataset from
+> the run described above — read-only from this point on.
+
 Automated collection of real-time flood/water-level sensor readings across
-Da Nang, Vietnam, sampled every 15 minutes for one week (2026-08-25 to
-2026-09-01). Collected as a substitute historical time series for the flood
-predictive engine, because the official history endpoint is broken (see
-below).
+Da Nang, Vietnam, sampled every 15 minutes from 2026-08-26 to 2026-09-01
+(see stop notice above). Collected as a substitute historical time series for
+the flood predictive engine, because the official history endpoint is broken
+(see below).
 
 **Data source:** [muangap-api.danang.gov.vn](https://muangap.danang.gov.vn) — the
 official Da Nang flood/rain map, `GET /v2/client/water_station/list_all`
@@ -145,6 +167,44 @@ One row = one station, sampled at one point in time.
 | `lat`, `lng` | float | Station coordinates (WGS 84) |
 | `depth_m` | float | **Current reading, metres.** For `Thap bao ngap`/`Thap bao lu` this is street flood depth; for river/reservoir gauges it is a continuous water level, not comparable to flood depth |
 | `is_core_urban` | bool | Whether the station falls inside the urban Da Nang bounding box used elsewhere in this project |
+
+## Data quality finding: readings do not behave like live sensors
+
+Across the full 6-day collection (19,716 rows, 212 rounds), two independent
+patterns show up that are inconsistent with real water rising and falling,
+and were the reason collection was stopped rather than continuing for the
+full planned week:
+
+**1. Urban flood towers were perfectly static.** The four `Thap bao ngap`
+stations in urban districts that ever showed a nonzero reading (Gầm cầu Đỏ,
+Chợ Thanh Vinh, Tổ 8 Thanh Khê Tây, UBND Hòa Thọ Tây) held the **exact same
+value to the centimetre for all 212 rounds** — 0.19 m, 0.01 m, 0.15 m, 0.01 m
+respectively, with zero variation. A live sensor, even reporting "no flood,"
+should show at least some noise over 6 days; a value frozen to 2 decimal
+places is more consistent with a cached/default value than a live reading.
+
+**2. Two mountain-area stations toggled between two fixed values.**
+`Thôn Thái Lai - Hòa Nhơn` (Bà Nà) alternated **exactly** between `0.0` and
+`0.97` every 15-minute round for 6+ hours straight (2026-08-30 21:55 to
+2026-08-31 03:25), never taking any intermediate value. `Thôn Thạch Nham Tây
+- Hòa Nhơn` (also Bà Nà) held `1.02` for 4 consecutive rounds (90 minutes),
+then dropped straight back to near-zero. Real water rising/falling passes
+through intermediate values continuously; toggling between two fixed numbers
+looks like an artifact of the backend serving from two out-of-sync sources
+(e.g. alternating replicas or a stale cache), not a genuine flood event —
+though this cannot be fully ruled out without independent rainfall data for
+that specific location and window.
+
+Both `Bà Nà` stations fall inside the coordinate bounding box used for
+`is_core_urban` but are geographically mountainous, outside the urban core
+this project targets (see the district-name-based scope filter used
+elsewhere in this project, e.g. `scraper/parse.py` in the `flood_detection`
+repo, which this dataset's simpler bbox-only check does not replicate).
+
+**Conclusion:** the `list_all` snapshot endpoint should not be treated as a
+reliable live measurement for this project's purposes. This finding, along
+with the broken `detail_report` history endpoint, is worth reporting to the
+operating agency.
 
 ## Notes and limitations
 
